@@ -3,10 +3,17 @@
  */
 package org.bgu.ise.ddb.history;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import javax.servlet.http.HttpServletResponse;
 
+import org.bgu.ise.ddb.MediaItems;
 import org.bgu.ise.ddb.ParentController;
 import org.bgu.ise.ddb.registration.*;
 import org.bgu.ise.ddb.User;
@@ -21,7 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.mongodb.MongoClient;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
 
 /**
  * @author Alex
@@ -57,10 +66,10 @@ public class HistoryController extends ParentController{
 				MongoClient client = new MongoClient("localhost", 27017);
 				MongoDatabase db = client.getDatabase("projectNoSql");
 				MongoCollection<Document> collection = db.getCollection("History");
-				Document doc = new Document("username", username);
-				doc.append("title", title);
+				Document doc = new Document("Username", username);
+				doc.append("Title", title);
 				long date=new Date().getTime();
-				doc.append("viewtime", date);
+				doc.append("Viewtime", date);
 				collection.insertOne(doc);
 				client.close();
 			}
@@ -86,9 +95,31 @@ public class HistoryController extends ParentController{
 	@org.codehaus.jackson.map.annotate.JsonView(HistoryPair.class)
 	public  HistoryPair[] getHistoryByUser(@RequestParam("entity")    String username){
 		//:TODO your implementation
+		
 		HistoryPair hp = new HistoryPair("aa", new Date());
-		System.out.println("ByUser "+hp);
-		return new HistoryPair[]{hp};
+		RegistarationController userCon = new RegistarationController();
+		ArrayList<HistoryPair> pairsResult= new ArrayList();
+		MongoClient client = null;
+		try {
+			if (userCon.isExistUser(username)) {
+				client = new MongoClient("localhost", 27017);
+				MongoDatabase db = client.getDatabase("projectNoSql");
+				MongoCollection<Document> collection = db.getCollection("History");
+				MongoCursor<Document> iterator= collection.find(Filters.eq("Username", username)).iterator();
+				while(iterator.hasNext()) {
+					Document pair = (Document) iterator.next();
+					pairsResult.add(new HistoryPair(pair.get("Title").toString(), new Date(Long.parseLong(pair.get("Timestamp").toString(), 10))));
+				}
+			}
+			client.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+//		System.out.println("ByUser "+hp);
+		HistoryPair[] historyPairs = new HistoryPair[pairsResult.size()];
+		pairsResult.toArray(historyPairs);
+		return historyPairs;
 	}
 	
 	
@@ -103,9 +134,29 @@ public class HistoryController extends ParentController{
 	@org.codehaus.jackson.map.annotate.JsonView(HistoryPair.class)
 	public  HistoryPair[] getHistoryByItems(@RequestParam("entity")    String title){
 		//:TODO your implementation
-		HistoryPair hp = new HistoryPair("aa", new Date());
-		System.out.println("ByItem "+hp);
-		return new HistoryPair[]{hp};
+		//HistoryPair hp = new HistoryPair("aa", new Date());
+		ArrayList<HistoryPair> pairsResult= new ArrayList();
+		MongoClient client = null;
+		ItemsController itemCon= new ItemsController();
+		try {
+			if (itemCon.isExistTitle(title)) {
+				client = new MongoClient("localhost", 27017);
+				MongoDatabase db = client.getDatabase("projectNoSql");
+				MongoCollection<Document> collection = db.getCollection("History");
+				MongoCursor<Document> iterator= collection.find(Filters.eq("Title", title)).iterator();
+				while(iterator.hasNext()) {
+					Document pair = (Document) iterator.next();
+					pairsResult.add(new HistoryPair(pair.get("Username").toString(), new Date(Long.parseLong(pair.get("Timestamp").toString(), 10))));
+				}
+			}
+			client.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		HistoryPair[] historyPairs = new HistoryPair[pairsResult.size()];
+		pairsResult.toArray(historyPairs);
+		return historyPairs;
 	}
 	
 	/**
@@ -118,9 +169,31 @@ public class HistoryController extends ParentController{
 	@org.codehaus.jackson.map.annotate.JsonView(HistoryPair.class)
 	public  User[] getUsersByItem(@RequestParam("title") String title){
 		//:TODO your implementation
-		User hp = new User("aa","aa","aa");
-		System.out.println(hp);
-		return new User[]{hp};
+		ArrayList<User> usersPairItem = new ArrayList<User>();
+		MongoClient client = null;
+		ItemsController itemCon= new ItemsController();
+		try {
+			if(itemCon.isExistTitle(title)) {
+				client = new MongoClient("localhost", 27017);
+				MongoDatabase db = client.getDatabase("projectNoSql");
+				MongoCollection<Document> collection = db.getCollection("Users");
+				MongoCursor<Document> iterator= collection.find(Filters.eq("Title", title)).iterator();
+				while(iterator.hasNext())
+				{
+					Document docPair = (Document)iterator.next();
+					MongoCursor<Document> useriterator= collection.find(Filters.eq("Username", docPair.get("Username"))).iterator();
+					Document docUser = (Document) useriterator.next();
+					usersPairItem.add(new User(docUser.get("Username").toString(),  docUser.get("Password").toString(), docUser.get("Firstname").toString(), docUser.get("Lastname").toString()));
+				}
+			}
+			client.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		User[] historyPairs = new User[usersPairItem.size()];
+		usersPairItem.toArray(historyPairs);
+		return historyPairs;
 	}
 	
 	/**
@@ -136,8 +209,37 @@ public class HistoryController extends ParentController{
 	public double  getItemsSimilarity(@RequestParam("title1") String title1,
 			@RequestParam("title2") String title2){
 		//:TODO your implementation
-		double ret = 0.0;
-		return ret;
+		ItemsController itemCon = new ItemsController();
+		double intersection=0;
+		double union=0;
+		try {
+			if (itemCon.isExistTitle(title1) && itemCon.isExistTitle(title2)) 
+			{
+				List<User> title1Users = Arrays.asList(getUsersByItem(title1));
+				List<User> title2Users = Arrays.asList(getUsersByItem(title2));
+				List<String> title2UsersNames =new ArrayList<String>();
+				for (User user: title2Users) {
+					title2UsersNames.add(user.getUsername());
+				}
+				Set<String> unionSet = new HashSet<String>(title2UsersNames);
+				for (User user: title1Users) {
+					String name=user.getUsername();
+		            if (title2UsersNames.contains(name)) {
+		            	intersection++;
+		            }
+		            unionSet.add(name);
+		            
+		        }			
+				union = unionSet.size();
+				return Math.max(0, intersection / union);
+			} else {
+				return 0;
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			return 0;
+		}
+	
 	}
 	
 
