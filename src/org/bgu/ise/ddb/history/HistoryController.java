@@ -60,7 +60,7 @@ public class HistoryController extends ParentController{
 		ItemsController itemCon= new ItemsController();
 		RegistarationController userCon= new RegistarationController();
 		try {
-			if(!userCon.isExistUser(username)|| itemCon.isExistTitle(title)) 
+			if(!userCon.isExistUser(username)|| !itemCon.isExistTitle(title)) 
 				status = HttpStatus.CONFLICT;
 			else{
 				MongoClient client = new MongoClient("localhost", 27017);
@@ -96,7 +96,7 @@ public class HistoryController extends ParentController{
 	public  HistoryPair[] getHistoryByUser(@RequestParam("entity")    String username){
 		//:TODO your implementation
 		
-		HistoryPair hp = new HistoryPair("aa", new Date());
+		
 		RegistarationController userCon = new RegistarationController();
 		ArrayList<HistoryPair> pairsResult= new ArrayList();
 		MongoClient client = null;
@@ -108,7 +108,7 @@ public class HistoryController extends ParentController{
 				MongoCursor<Document> iterator= collection.find(Filters.eq("Username", username)).iterator();
 				while(iterator.hasNext()) {
 					Document pair = (Document) iterator.next();
-					pairsResult.add(new HistoryPair(pair.get("Title").toString(), new Date(Long.parseLong(pair.get("Timestamp").toString(), 10))));
+					pairsResult.add(new HistoryPair(pair.get("Title").toString(), new Date(Long.parseLong(pair.get("Viewtime").toString(), 10))));
 				}
 			}
 			client.close();
@@ -146,7 +146,7 @@ public class HistoryController extends ParentController{
 				MongoCursor<Document> iterator= collection.find(Filters.eq("Title", title)).iterator();
 				while(iterator.hasNext()) {
 					Document pair = (Document) iterator.next();
-					pairsResult.add(new HistoryPair(pair.get("Username").toString(), new Date(Long.parseLong(pair.get("Timestamp").toString(), 10))));
+					pairsResult.add(new HistoryPair(pair.get("Username").toString(), new Date(Long.parseLong(pair.get("Viewtime").toString(), 10))));
 				}
 			}
 			client.close();
@@ -176,14 +176,18 @@ public class HistoryController extends ParentController{
 			if(itemCon.isExistTitle(title)) {
 				client = new MongoClient("localhost", 27017);
 				MongoDatabase db = client.getDatabase("projectNoSql");
-				MongoCollection<Document> collection = db.getCollection("Users");
+				
+				MongoCollection<Document> collection = db.getCollection("History");
+				MongoCollection<Document> collection2 = db.getCollection("Users");
+				
 				MongoCursor<Document> iterator= collection.find(Filters.eq("Title", title)).iterator();
+				
 				while(iterator.hasNext())
 				{
 					Document docPair = (Document)iterator.next();
-					MongoCursor<Document> useriterator= collection.find(Filters.eq("Username", docPair.get("Username"))).iterator();
-					Document docUser = (Document) useriterator.next();
-					usersPairItem.add(new User(docUser.get("Username").toString(),  docUser.get("Password").toString(), docUser.get("Firstname").toString(), docUser.get("Lastname").toString()));
+//					MongoCursor<Document> useriterator= collection.find(Filters.eq("Username", docPair.get("Username"))).iterator();
+					Document docUser = collection2.find(new Document("Username", docPair.get("Username"))).first();
+					usersPairItem.add(new User(docUser.get("Username").toString(), docUser.get("Password").toString(), docUser.get("FirstName").toString(), docUser.get("LastName").toString()));
 				}
 			}
 			client.close();
@@ -217,20 +221,30 @@ public class HistoryController extends ParentController{
 			{
 				List<User> title1Users = Arrays.asList(getUsersByItem(title1));
 				List<User> title2Users = Arrays.asList(getUsersByItem(title2));
-				List<String> title2UsersNames =new ArrayList<String>();
+				System.out.println("title1: " + title1Users.size() + "\n\ntitle2: "+ title2Users.size());
+				
+				Set<String> title2UsersNames =new HashSet<String>();
 				for (User user: title2Users) {
 					title2UsersNames.add(user.getUsername());
 				}
+				
 				Set<String> unionSet = new HashSet<String>(title2UsersNames);
+				
+				
+				Set<String> title1UsersNames =new HashSet<String>();
 				for (User user: title1Users) {
-					String name=user.getUsername();
+					title1UsersNames.add(user.getUsername());
+				}
+				
+				for (String name: title1UsersNames) {
 		            if (title2UsersNames.contains(name)) {
 		            	intersection++;
 		            }
 		            unionSet.add(name);
-		            
 		        }			
 				union = unionSet.size();
+				
+				System.out.println("union: " + union +  "\n\n" + "inter: " + intersection);
 				return Math.max(0, intersection / union);
 			} else {
 				return 0;
